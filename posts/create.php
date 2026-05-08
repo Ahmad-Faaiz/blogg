@@ -2,7 +2,7 @@
 // Mengambil koneksi database
 require_once '../config/database.php';
 
-// Inisialisasi session
+// Inisialisasi session HARUS DI AWAL
 session_start();
 
 // Ambil error dan form data dari session jika ada

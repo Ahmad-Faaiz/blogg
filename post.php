@@ -2,6 +2,15 @@
 // Mengambil koneksi database
 require_once 'config/database.php';
 
+// Inisialisasi session
+session_start();
+
+// Validasi koneksi database
+if (!$conn) {
+    header("Location: index.php?error=" . urlencode("Kesalahan koneksi database"));
+    exit();
+}
+
 // Mengecek apakah ada parameter id
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     header("Location: index.php?error=" . urlencode("Artikel tidak ditemukan"));
@@ -16,7 +25,7 @@ if ($id <= 0) {
     exit();
 }
 
-// Query untuk mengambil post detail
+// Query menggunakan prepared statement untuk keamanan
 $query = "SELECT 
             p.id,
             p.title,
@@ -27,17 +36,29 @@ $query = "SELECT
             c.slug as category_slug
           FROM posts p
           LEFT JOIN categories c ON p.category_id = c.id
-          WHERE p.id = $id";
+          WHERE p.id = ?
+          LIMIT 1";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
+
+if (!$stmt) {
+    header("Location: index.php?error=" . urlencode("Kesalahan query database"));
+    exit();
+}
+
+mysqli_stmt_bind_param($stmt, "i", $id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 
 // Cek apakah post ada
 if (!$result || mysqli_num_rows($result) === 0) {
+    mysqli_stmt_close($stmt);
     header("Location: index.php?error=" . urlencode("Artikel tidak ditemukan"));
     exit();
 }
 
 $post = mysqli_fetch_assoc($result);
+mysqli_stmt_close($stmt);
 
 // Query untuk mendapatkan artikel related (kategori yang sama)
 $related_query = "SELECT 
@@ -45,17 +66,27 @@ $related_query = "SELECT
                    p.title,
                    p.created_at
                  FROM posts p
-                 WHERE p.category_id = " . (int)$post['category_id'] . " 
-                 AND p.id != $id
+                 WHERE p.category_id = ? 
+                 AND p.id != ?
+                 AND (p.status = 'published' OR p.status IS NULL)
+                 ORDER BY p.created_at DESC
                  LIMIT 3";
 
-$related_result = mysqli_query($conn, $related_query);
-$related_posts = [];
+$stmt_related = mysqli_prepare($conn, $related_query);
 
-if ($related_result) {
+if ($stmt_related) {
+    mysqli_stmt_bind_param($stmt_related, "ii", $post['category_id'], $id);
+    mysqli_stmt_execute($stmt_related);
+    $related_result = mysqli_stmt_get_result($stmt_related);
+    $related_posts = [];
+    
     while ($row = mysqli_fetch_assoc($related_result)) {
         $related_posts[] = $row;
     }
+    
+    mysqli_stmt_close($stmt_related);
+} else {
+    $related_posts = [];
 }
 ?>
 
@@ -123,27 +154,46 @@ if ($related_result) {
 
                 <!-- Featured Image -->
                 <div class="mb-4">
-                    <div class="position-relative overflow-hidden rounded-3" style="height: 400px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <div class="d-flex align-items-center justify-content-center h-100">
-                            <i class="bi bi-image text-white" style="font-size: 4rem; opacity: 0.5;"></i>
-                        </div>
+                    <div class="position-relative overflow-hidden rounded-3" style="height: 400px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); background-size: cover; background-position: center;">
+                        <?php if (!empty($post['featured_image']) && file_exists($post['featured_image'])): ?>
+                            <img 
+                                src="<?php echo htmlspecialchars($post['featured_image']); ?>" 
+                                alt="<?php echo htmlspecialchars($post['title']); ?>"
+                                style="width: 100%; height: 100%; object-fit: cover;">
+                        <?php else: ?>
+                            <div class="d-flex align-items-center justify-content-center h-100">
+                                <i class="bi bi-image text-white" style="font-size: 4rem; opacity: 0.5;"></i>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
                 <!-- Article Content -->
                 <div class="article-content mb-5">
-                    <div class="lead mb-4">
-                        <p><?php echo nl2br(htmlspecialchars(substr($post['content'], 0, 200))); ?></p>
-                    </div>
+                    <?php 
+                    // Tampilkan excerpt jika ada, atau buat dari content
+                    $excerpt = !empty($post['excerpt']) ? $post['excerpt'] : substr(strip_tags($post['content']), 0, 200);
+                    $excerpt = trim($excerpt);
+                    if (strlen($excerpt) == 200) {
+                        $excerpt = substr($excerpt, 0, strrpos($excerpt, ' ')) . '...';
+                    }
+                    ?>
+                    
+                    <?php if (!empty($excerpt)): ?>
+                        <div class="lead mb-4 fw-500 fs-5" style="color: #495057; border-left: 4px solid #0d6efd; padding-left: 1rem;">
+                            <p class="mb-0"><?php echo nl2br(htmlspecialchars($excerpt)); ?></p>
+                        </div>
+                    <?php endif; ?>
 
                     <div class="fs-5 lh-lg">
                         <?php 
-                        // Simple paragraph formatting
+                        // Format paragraf konten dengan baik
                         $content = htmlspecialchars($post['content']);
-                        $paragraphs = explode("\n\n", $content);
+                        $paragraphs = array_filter(explode("\n\n", $content));
                         
                         foreach ($paragraphs as $paragraph) {
-                            if (!empty(trim($paragraph))) {
+                            $paragraph = trim($paragraph);
+                            if (!empty($paragraph)) {
                                 echo "<p class='mb-3'>" . nl2br($paragraph) . "</p>";
                             }
                         }
@@ -152,10 +202,18 @@ if ($related_result) {
                 </div>
 
                 <!-- Article Footer -->
-                <div class="d-flex gap-2 pt-4 border-top">
+                <div class="d-flex gap-2 pt-4 border-top flex-wrap">
                     <a href="index.php" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Kembali
                     </a>
+                    <?php if (!empty($post['updated_at'])): ?>
+                        <div class="ms-auto text-muted align-self-center">
+                            <small>
+                                <i class="bi bi-pencil"></i> 
+                                Diperbarui: <?php echo date('d F Y \p\u\k\u\l H:i', strtotime($post['updated_at'])); ?>
+                            </small>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
             </article>
