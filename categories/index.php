@@ -2,6 +2,9 @@
 // Mengambil koneksi database
 require_once '../config/database.php';
 
+// Inisialisasi session
+session_start();
+
 // Inisialisasi variabel
 $success_message = '';
 $error_message = '';
@@ -14,22 +17,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (empty($category_name)) {
         $error_message = "Nama kategori tidak boleh kosong!";
     } else {
-        // Escape input
-        $category_name = mysqli_real_escape_string($conn, $category_name);
-        
         // Generate slug dari nama kategori
         $slug = strtolower(str_replace(' ', '-', $category_name));
         $slug = preg_replace('/[^a-z0-9-]/', '', $slug);
-        $slug = mysqli_real_escape_string($conn, $slug);
         
-        // Query INSERT
-        $query = "INSERT INTO categories (name, slug) 
-                  VALUES ('$category_name', '$slug')";
+        // Query INSERT menggunakan prepared statement
+        $query = "INSERT INTO categories (name, slug) VALUES (?, ?)";
+        $stmt = mysqli_prepare($conn, $query);
         
-        if (mysqli_query($conn, $query)) {
-            $success_message = "Kategori berhasil ditambahkan!";
+        if (!$stmt) {
+            $error_message = "Error query: " . mysqli_error($conn);
         } else {
-            $error_message = "Error: " . mysqli_error($conn);
+            mysqli_stmt_bind_param($stmt, "ss", $category_name, $slug);
+            
+            if (mysqli_stmt_execute($stmt)) {
+                $success_message = "Kategori berhasil ditambahkan!";
+            } else {
+                $error_message = "Error: " . mysqli_error($conn);
+            }
+            
+            mysqli_stmt_close($stmt);
         }
     }
 }
@@ -37,12 +44,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Proses hapus kategori
 if (isset($_GET['delete']) && !empty($_GET['delete'])) {
     $id = (int)$_GET['delete'];
-    $query = "DELETE FROM categories WHERE id = $id";
     
-    if (mysqli_query($conn, $query)) {
-        $success_message = "Kategori berhasil dihapus!";
+    // Query DELETE menggunakan prepared statement
+    $query = "DELETE FROM categories WHERE id = ?";
+    $stmt = mysqli_prepare($conn, $query);
+    
+    if (!$stmt) {
+        $error_message = "Error query: " . mysqli_error($conn);
     } else {
-        $error_message = "Error: " . mysqli_error($conn);
+        mysqli_stmt_bind_param($stmt, "i", $id);
+        
+        if (mysqli_stmt_execute($stmt)) {
+            $success_message = "Kategori berhasil dihapus!";
+        } else {
+            $error_message = "Error: " . mysqli_error($conn);
+        }
+        
+        mysqli_stmt_close($stmt);
     }
 }
 

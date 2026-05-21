@@ -19,16 +19,27 @@ if ($id <= 0) {
     exit();
 }
 
-// Ambil data post dari database
-$query = "SELECT * FROM posts WHERE id = $id";
-$result = mysqli_query($conn, $query);
+// Ambil data post dari database menggunakan prepared statement
+$query = "SELECT id, title, content, category_id, created_at FROM posts WHERE id = ?";
+$stmt = mysqli_prepare($conn, $query);
+
+if (!$stmt) {
+    header("Location: index.php?error=" . urlencode("Kesalahan query database"));
+    exit();
+}
+
+mysqli_stmt_bind_param($stmt, "i", $id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 
 if (!$result || mysqli_num_rows($result) === 0) {
+    mysqli_stmt_close($stmt);
     header("Location: index.php?error=" . urlencode("Artikel tidak ditemukan"));
     exit();
 }
 
 $post = mysqli_fetch_assoc($result);
+mysqli_stmt_close($stmt);
 
 // Ambil error dan form data dari session jika ada
 $errors = isset($_SESSION['errors']) ? $_SESSION['errors'] : [];

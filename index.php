@@ -26,9 +26,17 @@ $query = "SELECT
           FROM posts p
           LEFT JOIN categories c ON p.category_id = c.id
           ORDER BY p.created_at DESC
-          LIMIT $limit OFFSET $offset";
+          LIMIT ? OFFSET ?";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
+if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "ii", $limit, $offset);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+} else {
+    $result = false;
+}
+
 $posts = [];
 
 if ($result) {

@@ -15,7 +15,6 @@ unset($_SESSION['type']);
 
 // Inisialisasi variabel untuk search dan filter
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$search_escaped = mysqli_real_escape_string($conn, $search);
 
 // Pagination
 $limit = 10;
@@ -23,26 +22,57 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
 // Query untuk menghitung total posts
-$count_query = "SELECT COUNT(*) as total FROM posts WHERE title LIKE '%$search_escaped%'";
-$count_result = mysqli_query($conn, $count_query);
+if (!empty($search)) {
+    $count_query = "SELECT COUNT(*) as total FROM posts WHERE title LIKE ?";
+    $count_stmt = mysqli_prepare($conn, $count_query);
+    $search_param = '%' . $search . '%';
+    mysqli_stmt_bind_param($count_stmt, "s", $search_param);
+    mysqli_stmt_execute($count_stmt);
+    $count_result = mysqli_stmt_get_result($count_stmt);
+} else {
+    $count_query = "SELECT COUNT(*) as total FROM posts";
+    $count_result = mysqli_query($conn, $count_query);
+}
+
 $count_row = mysqli_fetch_assoc($count_result);
 $total_posts = $count_row['total'];
 $total_pages = ceil($total_posts / $limit);
 
 // Query untuk mengambil posts dengan kategori
-$query = "SELECT 
-            p.id,
-            p.title,
-            p.created_at,
-            p.category_id,
-            c.name as category_name
-          FROM posts p
-          LEFT JOIN categories c ON p.category_id = c.id
-          WHERE p.title LIKE '%$search_escaped%'
-          ORDER BY p.created_at DESC
-          LIMIT $limit OFFSET $offset";
+if (!empty($search)) {
+    $query = "SELECT 
+                p.id,
+                p.title,
+                p.created_at,
+                p.category_id,
+                c.name as category_name
+              FROM posts p
+              LEFT JOIN categories c ON p.category_id = c.id
+              WHERE p.title LIKE ?
+              ORDER BY p.created_at DESC
+              LIMIT ? OFFSET ?";
+    $stmt = mysqli_prepare($conn, $query);
+    $search_param = '%' . $search . '%';
+    mysqli_stmt_bind_param($stmt, "sii", $search_param, $limit, $offset);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+} else {
+    $query = "SELECT 
+                p.id,
+                p.title,
+                p.created_at,
+                p.category_id,
+                c.name as category_name
+              FROM posts p
+              LEFT JOIN categories c ON p.category_id = c.id
+              ORDER BY p.created_at DESC
+              LIMIT ? OFFSET ?";
+    $stmt = mysqli_prepare($conn, $query);
+    mysqli_stmt_bind_param($stmt, "ii", $limit, $offset);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+}
 
-$result = mysqli_query($conn, $query);
 $posts = [];
 
 if ($result) {
@@ -167,6 +197,12 @@ if ($result) {
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
+                                        <a href="../post.php?id=<?php echo $post['id']; ?>" 
+                                           class="btn btn-sm btn-info" 
+                                           title="Baca Artikel"
+                                           target="_blank">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
                                         <a href="edit.php?id=<?php echo $post['id']; ?>" 
                                            class="btn btn-sm btn-warning" 
                                            title="Edit">

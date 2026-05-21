@@ -39,39 +39,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Jika tidak ada error, lanjutkan ke update
     if (empty($errors)) {
         
-        // Cek apakah post ada di database
-        $check_query = "SELECT id FROM posts WHERE id = $id";
-        $check_result = mysqli_query($conn, $check_query);
+        // Gunakan prepared statement untuk keamanan
+        $check_query = "SELECT id FROM posts WHERE id = ?";
+        $check_stmt = mysqli_prepare($conn, $check_query);
         
-        if (!$check_result || mysqli_num_rows($check_result) === 0) {
-            $errors[] = "Artikel tidak ditemukan";
+        if (!$check_stmt) {
+            $errors[] = "Error query: " . mysqli_error($conn);
         } else {
+            mysqli_stmt_bind_param($check_stmt, "i", $id);
+            mysqli_stmt_execute($check_stmt);
+            $check_result = mysqli_stmt_get_result($check_stmt);
             
-            // Escape input untuk keamanan
-            $title = mysqli_real_escape_string($conn, $title);
-            $content = mysqli_real_escape_string($conn, $content);
-            
-            // Query UPDATE
-            $query = "UPDATE posts 
-                      SET title = '$title', 
-                          content = '$content', 
-                          category_id = $category_id 
-                      WHERE id = $id";
-            
-            // Eksekusi query
-            if (mysqli_query($conn, $query)) {
-                $success = true;
-                
-                // Simpan pesan sukses ke session
-                $_SESSION['message'] = "Artikel berhasil diperbarui!";
-                $_SESSION['type'] = 'success';
-                
-                // Redirect ke halaman index dengan pesan sukses
-                header("Location: index.php");
-                exit();
+            if (mysqli_num_rows($check_result) === 0) {
+                $errors[] = "Artikel tidak ditemukan";
             } else {
-                $errors[] = "Error: " . mysqli_error($conn);
+                // Query UPDATE dengan prepared statement
+                $query = "UPDATE posts 
+                          SET title = ?, 
+                              content = ?, 
+                              category_id = ?
+                          WHERE id = ?";
+                
+                $stmt = mysqli_prepare($conn, $query);
+                
+                if (!$stmt) {
+                    $errors[] = "Error query: " . mysqli_error($conn);
+                } else {
+                    // Bind parameters: s = string, i = integer
+                    mysqli_stmt_bind_param($stmt, "ssii", $title, $content, $category_id, $id);
+                    
+                    // Eksekusi query
+                    if (mysqli_stmt_execute($stmt)) {
+                        $success = true;
+                        
+                        // Simpan pesan sukses ke session
+                        $_SESSION['message'] = "Artikel berhasil diperbarui!";
+                        $_SESSION['type'] = 'success';
+                        
+                        // Redirect ke halaman index dengan pesan sukses
+                        header("Location: index.php");
+                        exit();
+                    } else {
+                        $errors[] = "Error: " . mysqli_error($conn);
+                    }
+                    
+                    mysqli_stmt_close($stmt);
+                }
             }
+            
+            mysqli_stmt_close($check_stmt);
         }
     }
 }

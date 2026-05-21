@@ -68,7 +68,6 @@ $related_query = "SELECT
                  FROM posts p
                  WHERE p.category_id = ? 
                  AND p.id != ?
-                 AND (p.status = 'published' OR p.status IS NULL)
                  ORDER BY p.created_at DESC
                  LIMIT 3";
 
@@ -155,36 +154,14 @@ if ($stmt_related) {
                 <!-- Featured Image -->
                 <div class="mb-4">
                     <div class="position-relative overflow-hidden rounded-3" style="height: 400px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); background-size: cover; background-position: center;">
-                        <?php if (!empty($post['featured_image']) && file_exists($post['featured_image'])): ?>
-                            <img 
-                                src="<?php echo htmlspecialchars($post['featured_image']); ?>" 
-                                alt="<?php echo htmlspecialchars($post['title']); ?>"
-                                style="width: 100%; height: 100%; object-fit: cover;">
-                        <?php else: ?>
-                            <div class="d-flex align-items-center justify-content-center h-100">
-                                <i class="bi bi-image text-white" style="font-size: 4rem; opacity: 0.5;"></i>
-                            </div>
-                        <?php endif; ?>
+                        <div class="d-flex align-items-center justify-content-center h-100">
+                            <i class="bi bi-image text-white" style="font-size: 4rem; opacity: 0.5;"></i>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Article Content -->
                 <div class="article-content mb-5">
-                    <?php 
-                    // Tampilkan excerpt jika ada, atau buat dari content
-                    $excerpt = !empty($post['excerpt']) ? $post['excerpt'] : substr(strip_tags($post['content']), 0, 200);
-                    $excerpt = trim($excerpt);
-                    if (strlen($excerpt) == 200) {
-                        $excerpt = substr($excerpt, 0, strrpos($excerpt, ' ')) . '...';
-                    }
-                    ?>
-                    
-                    <?php if (!empty($excerpt)): ?>
-                        <div class="lead mb-4 fw-500 fs-5" style="color: #495057; border-left: 4px solid #0d6efd; padding-left: 1rem;">
-                            <p class="mb-0"><?php echo nl2br(htmlspecialchars($excerpt)); ?></p>
-                        </div>
-                    <?php endif; ?>
-
                     <div class="fs-5 lh-lg">
                         <?php 
                         // Format paragraf konten dengan baik
@@ -206,14 +183,6 @@ if ($stmt_related) {
                     <a href="index.php" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Kembali
                     </a>
-                    <?php if (!empty($post['updated_at'])): ?>
-                        <div class="ms-auto text-muted align-self-center">
-                            <small>
-                                <i class="bi bi-pencil"></i> 
-                                Diperbarui: <?php echo date('d F Y \p\u\k\u\l H:i', strtotime($post['updated_at'])); ?>
-                            </small>
-                        </div>
-                    <?php endif; ?>
                 </div>
 
             </article>
